@@ -7,12 +7,12 @@ import ShareScreenButton from "../components/ShareScreenButton"
 
 function Room() {
   const { id } = useParams()
-  const { ws, me, stream, peers, shareScreen } = useRoomContext()
+  const { ws, me, stream, peers, screenShareToggle, isRecording, startRecording, stopRecording, videoURL } = useRoomContext()
   // const ws = context && context.ws
   // const me = context && context.me
   // const stream = context && context.stream
   // const peers = context && context.peers
-  // const shareScreen = context && context.shareScreen
+  // const screenShareToggle = context && context.screenShareToggle
 
   // useEffect(() => {
   //   console.log({ stream, peers })
@@ -28,7 +28,9 @@ function Room() {
   }, [peers])
 
   return (
-    <div> <p>Room id: {id}</p><p>Peer id: {me?._id}</p>
+    <div style={{ position: 'relative' }}>
+      {isRecording && <div style={{ position: 'fixed', top: 0, left: 0 }}>Recording: On</div>}
+      <p>Room id: {id}</p><p>Peer id: {me?._id}</p>
       <div className="grid grid-cols-4 gap-4">
         <VideoPlayer stream={stream} peerId="me" />
         {/* {Object.entries(peers as PeerState).map(([peerId, peer]) => (
@@ -38,10 +40,23 @@ function Room() {
         {Object.values(peers as PeerState).map((peer, index: number) => (
           <VideoPlayer key={`vid-${index + 1}`} stream={peer.stream} peerId={Object.keys(peers)[index]} />
         ))}
+        {videoURL && (
+          <div>
+            <p>Recorded Video:</p>
+            <video controls src={videoURL} />
+          </div>
+        )}
       </div>
       <div className="fixed bottom-0 p-6 w-full flex justify-center border-t-2">
-        <ShareScreenButton shareScreen={shareScreen} />
+        <ShareScreenButton screenShareToggle={screenShareToggle} />
+
+        {isRecording ? (
+          <button onClick={stopRecording}>Stop Recording</button>
+        ) : (
+          <button onClick={startRecording}>Start Recording</button>
+        )}
       </div>
+
     </div>
   )
 }

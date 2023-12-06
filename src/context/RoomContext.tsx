@@ -1,9 +1,10 @@
 // import Peer from "peerjs";
-import { ReactNode, createContext, useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { ReactNode, createContext, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidV4 } from 'uuid'
 import socketIOClient from 'socket.io-client'
 import Peer from "peerjs";
+import RecordRTC from 'recordrtc';
 import { peerReducer } from "./peerReducer";
 import { addPeerAction, removePeerAction } from "./peerActions";
 
@@ -14,7 +15,7 @@ const WS = 'http://localhost:8080'
 //   me: Peer | null
 //   stream: MediaStream | null
 //   peers: PeerState
-//   shareScreen: () => void
+//   screenShareToggle: () => void
 // }
 
 // export const RoomContext = createContext<RoomContextType | null>(null)
@@ -30,6 +31,52 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
   const [isShareScreen, setIsShareScreen] = useState(false)
 
   const ws = useMemo(() => socketIOClient(WS), [])
+
+
+
+  const videoRef = useRef(null);
+  const [recorder, setRecorder] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [videoURL, setVideoURL] = useState('');
+
+
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // ws.emit('recording-started', { roomId: })
+    const recorderInstance = new RecordRTC(stream, {
+      type: 'video',
+      mimeType: 'video/webm',
+    });
+
+    recorderInstance.startRecording();
+    setRecorder(recorderInstance);
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    if (recorder) {
+      recorder.stopRecording(() => {
+        const blob = recorder.getBlob();
+        const videoURL = URL.createObjectURL(blob);
+        setVideoURL(videoURL)
+        // ws.emit('recording-stopped', { roomId: })
+
+        // Generate a dynamic filename based on the current date and time
+        const currentDate = new Date();
+        const formattedDate = currentDate.toISOString().replace(/[-:]/g, '').slice(0, -5); // Remove separators and milliseconds
+        const fileName = `recording-video_${formattedDate}.webm`;
+
+        // Trigger download of the recorded video
+        recorder.save(fileName);
+        // You can use the videoURL to display the recorded video or send it to the server.
+        console.log('Video URL:', videoURL);
+
+        setIsRecording(false);
+      });
+    }
+  };
+
+
   const peer = useMemo(() => {
     const meId = uuidV4()
     const me = new Peer(meId, {
@@ -55,7 +102,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     removePeerAction(peerId)
   }, [])
 
-  const switchStream = (localStream: MediaStream) => {
+  const switchStream = useCallback((localStream: MediaStream) => {
     console.log('TCL -> switchStream -> stream:', { stream })
     setStream(localStream)
     // setScreenSharingId(me?.id || '')
@@ -69,15 +116,15 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
         connection[0].peerConnection.getSenders()[1].replaceTrack(videoTrack).catch((err: any) => console.error(err))
       })
     }
+  }, [peer, stream])
 
-  }
-  const shareScreen = () => {
+  const screenShareToggle = useCallback(() => {
     if (isShareScreen) {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(switchStream)
     } else {
       navigator.mediaDevices.getDisplayMedia({}).then(switchStream)
     }
-  }
+  }, [isShareScreen, switchStream])
 
 
   const userJoined = useCallback(
@@ -140,7 +187,25 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [ws, peer, stream, userJoined, dispatch])
 
-  return (<RoomContext.Provider value={{ ws, me, stream, peers, shareScreen }}>{children}</RoomContext.Provider>)
+  useEffect(() => {
+    if (stream) {
+      // Listen for the 'inactive' event on the tracks
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', screenShareToggle);
+      });
+    }
+
+    return () => {
+      // Remove the event listeners when the component unmounts
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          track.removeEventListener('ended', screenShareToggle);
+        });
+      }
+    };
+  }, [screenShareToggle, stream]);
+
+  return (<RoomContext.Provider value={{ ws, me, stream, peers, screenShareToggle, videoRef, isRecording, startRecording, stopRecording, videoURL }}>{children}</RoomContext.Provider>)
 }
 
 export default RoomContextProvider
