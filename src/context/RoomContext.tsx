@@ -8,8 +8,12 @@ import RecordRTC from 'recordrtc';
 import { peerReducer } from "./peerReducer";
 import { addPeerAction, removePeerAction } from "./peerActions";
 
-const WS = 'http://localhost:8080'
+const PORT = 8080;
+const WS = `http://localhost:${PORT}`
 
+const delay = (ms: number) => {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 // type RoomContextType = {
 //   ws: Socket
 //   me: Peer | null
@@ -29,10 +33,10 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
   const [peers, dispatch] = useReducer(peerReducer, {})
   // const [screenSharingId, setScreenSharingId] = useState("")
   const [isShareScreen, setIsShareScreen] = useState(false)
+  const [isMuted, setIsMuted] = useState(true);
+  const [isWebcamOn, setIsWebcamOn] = useState(true)
 
   const ws = useMemo(() => socketIOClient(WS), [])
-
-
 
   const videoRef = useRef(null);
   const [recorder, setRecorder] = useState(null);
@@ -41,7 +45,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
 
 
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
     // ws.emit('recording-started', { roomId: })
     const recorderInstance = new RecordRTC(stream, {
       type: 'video',
@@ -80,9 +84,9 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
   const peer = useMemo(() => {
     const meId = uuidV4()
     const me = new Peer(meId, {
-      host: "localhost",
-      port: 9000,
-      path: '/myapp'
+      host: "/localhost", // localhost
+      port: PORT,
+      path: '/peerjs'
     })
     setMe(me)
     return me;
@@ -109,10 +113,8 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     setIsShareScreen(prevVal => !prevVal)
 
     if (peer) {
-      console.log({ connections: peer.connections })
       Object.values(peer?.connections).forEach((connection: any) => {
         const videoTrack = localStream?.getTracks().find(track => track.kind === 'video')
-        console.log('TCL -> Object.values -> connection:', { connection, videoTrack, senders: connection[0].peerConnection.getSenders() })
         connection[0].peerConnection.getSenders()[1].replaceTrack(videoTrack).catch((err: any) => console.error(err))
       })
     }
@@ -128,12 +130,12 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
 
 
   const userJoined = useCallback(
-    ({ peerId }: { peerId: string }) => {
+    async ({ peerId }: { peerId: string }) => {
       // if (!stream) return
-      console.log('user joined: ', peerId)
+      await delay(500);
       const call = peer.call(peerId, stream as MediaStream)
+
       call.on('stream', peerStream => {
-        console.log('add peer-1')
         dispatch(addPeerAction(peerId, peerStream))
       })
 
@@ -141,12 +143,10 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
         console.error('Call error:', error);
       });
     },
-    [peer, stream, dispatch]
+    [peer, stream]
   )
 
   useEffect(() => {
-    // setMe(peer)
-
     try {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
         setStream(stream)
@@ -167,20 +167,14 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
 
 
   peer.on('call', (call) => {
-    console.log('Answer user call')
     call.answer(stream)
     call.on('stream', peerStream => {
-      console.log('add peer-2')
       dispatch(addPeerAction(call.peer, peerStream))
     })
   })
 
   useEffect(() => {
-    // if (!(me && stream)) return
-    // if (!me) return
-    // if (!stream) return
     ws.on('user-joined', userJoined)
-
 
     return () => {
       ws.off('user-joined', userJoined)
@@ -188,7 +182,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
   }, [ws, peer, stream, userJoined, dispatch])
 
   useEffect(() => {
-    if (stream) {
+    if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
       // Listen for the 'inactive' event on the tracks
       stream.getTracks().forEach(track => {
         track.addEventListener('ended', screenShareToggle);
@@ -197,7 +191,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       // Remove the event listeners when the component unmounts
-      if (stream) {
+      if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
         stream.getTracks().forEach(track => {
           track.removeEventListener('ended', screenShareToggle);
         });
@@ -205,7 +199,52 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [screenShareToggle, stream]);
 
-  return (<RoomContext.Provider value={{ ws, me, stream, peers, screenShareToggle, videoRef, isRecording, startRecording, stopRecording, videoURL }}>{children}</RoomContext.Provider>)
+
+  const toggleWebcam = () => {
+    if (stream) {
+      if (typeof stream.getVideoTracks === 'function') {
+        const videoTracks = stream.getVideoTracks()
+        if (Array.isArray(videoTracks) && videoTracks.length > 0) {
+          videoTracks.forEach(track => {
+            if ('enabled' in track) {
+              track.enabled = !isWebcamOn;
+            } else {
+              console.error('Track does not have an "enabled" property:', track);
+            }
+          });
+          setIsWebcamOn(prevWebcam => !prevWebcam);
+        } else {
+          console.error('No video tracks found in the stream.');
+        }
+      } else {
+        console.error('getVideoTracks method not available in the stream object.');
+      }
+    }
+  };
+
+  const toggleMute = () => {
+    if (stream) {
+      if (typeof stream.getAudioTracks === 'function') {
+        const audioTracks = stream.getAudioTracks()
+        if (Array.isArray(audioTracks) && audioTracks.length > 0) {
+          audioTracks.forEach(track => {
+            if ('enabled' in track) {
+              track.enabled = !isMuted;
+            } else {
+              console.error('Track does not have an "enabled" property:', track);
+            }
+          });
+          setIsMuted(prevMuted => !prevMuted)
+        } else {
+          console.error('No audio tracks found in the stream.');
+        }
+      } else {
+        console.error('getAudioTracks method not available in the stream object.');
+      }
+    }
+  };
+
+  return (<RoomContext.Provider value={{ ws, me, stream, peers, screenShareToggle, videoRef, isRecording, startRecording, stopRecording, videoURL, isWebcamOn, isMuted, toggleWebcam, toggleMute }}>{children}</RoomContext.Provider>)
 }
 
 export default RoomContextProvider

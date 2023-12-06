@@ -21,13 +21,11 @@ export const peerReducer = (state: PeerState, action: PeerAction) => {
           stream: action.payload.stream,
         },
       };
-      console.log("TCL -> peerReducer -> newState: ADD_PEER", { newState });
       return newState;
     }
     case REMOVE_PEER: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [action.payload.peerId]: deleted, ...rest } = state;
-      console.log("TCL -> peerReducer -> rest: REMOVE_PEER", rest);
       return rest;
     }
     default:

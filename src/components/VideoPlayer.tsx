@@ -1,27 +1,19 @@
 import { useEffect, useRef } from "react"
 
-function VideoPlayer({ peerId, stream }: { peerId: string, stream: MediaStream }) {
+function VideoPlayer({ peerId, stream, isMuted = false }: { peerId: string, stream: MediaStream, isMuted?: boolean }) {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream
+    if (videoRef.current && stream instanceof MediaStream) {
+      videoRef.current.srcObject = stream;
+    }
   }, [stream])
   return (
     <div>
-      <video ref={videoRef} autoPlay muted />
+      <video ref={videoRef} autoPlay muted={isMuted} />
       <p>#{peerId}</p>
     </div>
   )
 }
 
-/* const VideoPlayer: React.FC<{ stream: MediaStream }> = ({ stream }) => {
-
-  const videoRef = useRef<HTMLVideoElement>()
-  useEffect(() => {
-    if(videoRef.current) videoRef.current.srcObject = stream
-  }, [stream])
-  return (
-    <video ref={videoRef} />
-  )
-} */
 export default VideoPlayer
