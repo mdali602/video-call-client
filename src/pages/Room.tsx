@@ -13,6 +13,11 @@ function Room() {
     if (me) ws.emit('join-room', { roomId: id, peerId: me._id })
   }, [id, me, ws])
 
+
+  useEffect(() => {
+    console.log('TCL -> peers:', { peers })
+  }, [peers])
+
   return (
     <div style={{ position: 'relative' }}>
       {isRecording && <div style={{ position: 'fixed', top: 0, left: 0 }}>Recording: On</div>}
@@ -23,9 +28,12 @@ function Room() {
           <VideoPlayer stream={peer.stream} peerId={peerId} />
         ))} */}
 
-        {Object.values(peers as PeerState).map((peer, index: number) => (
-          <VideoPlayer key={`vid-${index + 1}`} stream={peer.stream} isMuted={true} peerId={Object.keys(peers)[index]} />
-        ))}
+        {Object.values(peers as PeerState).map((p, index: number) => {
+          console.log('TCL -> {Object.values -> p:', { p })
+          return (
+            <VideoPlayer key={`vid-${index + 1}`} stream={p.stream} isMuted={true} peerId={Object.keys(peers)[index]} />
+          )
+        })}
         {/* {videoURL && (
           <div>
             <p>Recorded Video:</p>

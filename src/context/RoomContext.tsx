@@ -92,6 +92,14 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     return me;
   }, [])
 
+  peer.on('call', (call) => {
+    call.answer(stream)
+    call.on('stream', peerStream => {
+      console.log('TCL -> peer.on -> peerStream: ##-1', { peerStream })
+      dispatch(addPeerAction(call.peer, peerStream))
+    })
+  })
+
   const enterRoom = useCallback(({ roomId }: { roomId: string }) => {
     console.log({ roomId })
     navigate(`/room/${roomId}`)
@@ -113,6 +121,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     setIsShareScreen(prevVal => !prevVal)
 
     if (peer) {
+      console.log('TCL -> switchStream -> peer:', { peer })
       Object.values(peer?.connections).forEach((connection: any) => {
         const videoTrack = localStream?.getTracks().find(track => track.kind === 'video')
         connection[0].peerConnection.getSenders()[1].replaceTrack(videoTrack).catch((err: any) => console.error(err))
@@ -136,6 +145,7 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
       const call = peer.call(peerId, stream as MediaStream)
 
       call.on('stream', peerStream => {
+        console.log('TCL -> peer.on -> peerStream: ##-2', { peerStream })
         dispatch(addPeerAction(peerId, peerStream))
       })
 
@@ -145,59 +155,6 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
     },
     [peer, stream]
   )
-
-  useEffect(() => {
-    try {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-        setStream(stream)
-      })
-    } catch (error) {
-      console.error(error)
-    }
-
-    ws.on('room-created', enterRoom)
-    ws.on('get-users', getUsers)
-    ws.on('user-disconnected', removePeer)
-    return () => {
-      ws.off('room-created', enterRoom)
-      ws.off('get-users', getUsers)
-      ws.off('user-disconnected', removePeer)
-    }
-  }, [ws, enterRoom, getUsers, removePeer])
-
-
-  peer.on('call', (call) => {
-    call.answer(stream)
-    call.on('stream', peerStream => {
-      dispatch(addPeerAction(call.peer, peerStream))
-    })
-  })
-
-  useEffect(() => {
-    ws.on('user-joined', userJoined)
-
-    return () => {
-      ws.off('user-joined', userJoined)
-    }
-  }, [ws, peer, stream, userJoined, dispatch])
-
-  useEffect(() => {
-    if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
-      // Listen for the 'inactive' event on the tracks
-      stream.getTracks().forEach(track => {
-        track.addEventListener('ended', screenShareToggle);
-      });
-    }
-
-    return () => {
-      // Remove the event listeners when the component unmounts
-      if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
-        stream.getTracks().forEach(track => {
-          track.removeEventListener('ended', screenShareToggle);
-        });
-      }
-    };
-  }, [screenShareToggle, stream]);
 
 
   const toggleWebcam = () => {
@@ -243,6 +200,52 @@ export const RoomContextProvider = ({ children }: { children: ReactNode }) => {
       }
     }
   };
+
+  useEffect(() => {
+    try {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
+        setStream(stream)
+      })
+    } catch (error) {
+      console.error(error)
+    }
+
+    ws.on('room-created', enterRoom)
+    ws.on('get-users', getUsers)
+    ws.on('user-disconnected', removePeer)
+    return () => {
+      ws.off('room-created', enterRoom)
+      ws.off('get-users', getUsers)
+      ws.off('user-disconnected', removePeer)
+    }
+  }, [ws, enterRoom, getUsers, removePeer])
+
+
+  useEffect(() => {
+    ws.on('user-joined', userJoined)
+
+    return () => {
+      ws.off('user-joined', userJoined)
+    }
+  }, [ws, userJoined])
+
+  useEffect(() => {
+    if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
+      // Listen for the 'inactive' event on the tracks
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', screenShareToggle);
+      });
+    }
+
+    return () => {
+      // Remove the event listeners when the component unmounts
+      if (stream && stream.getTracks && typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach(track => {
+          track.removeEventListener('ended', screenShareToggle);
+        });
+      }
+    };
+  }, [screenShareToggle, stream]);
 
   return (<RoomContext.Provider value={{ ws, me, stream, peers, screenShareToggle, videoRef, isRecording, startRecording, stopRecording, videoURL, isWebcamOn, isMuted, toggleWebcam, toggleMute }}>{children}</RoomContext.Provider>)
 }

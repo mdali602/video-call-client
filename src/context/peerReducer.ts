@@ -12,7 +12,9 @@ type PeerAction =
       payload: { peerId: string };
     };
 
-export const peerReducer = (state: PeerState, action: PeerAction) => {
+const initialState: PeerState = {};
+
+export const peerReducer = (state = initialState, action: PeerAction) => {
   switch (action.type) {
     case ADD_PEER: {
       const newState = {
